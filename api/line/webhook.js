@@ -1,7 +1,9 @@
 const crypto = require('node:crypto');
-const { createPendingMeter, confirmPendingMeter, cancelPendingMeter } = require('../../src/electricity/meter-service');
 const { meterConfirmationFlex } = require('../../src/electricity/flex');
 const LINE_REPLY_API_URL = 'https://api.line.me/v2/bot/message/reply';
+const TEST_CURRENT_READING = 1234.5;
+const TEST_PREVIOUS_READING = 1200.0;
+const TEST_USAGE = TEST_CURRENT_READING - TEST_PREVIOUS_READING;
 
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -109,51 +111,18 @@ async function processTextEvent(event) {
     return;
   }
 
-  let result;
-  try {
-    result = await createPendingMeter(event.source.userId, command.meterReading);
-  } catch (error) {
-    console.error('Meter pending creation error:', error.message);
-    await reply(event.replyToken, [textMessage('❌ ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง')]);
-    return;
-  }
-  if (result.kind === 'decreased') {
-    await reply(event.replyToken, [textMessage('⚠️ ค่ามิเตอร์ครั้งนี้น้อยกว่าครั้งก่อน\nกรุณาตรวจสอบอีกครั้ง')]);
-    return;
-  }
-  const { pending } = result;
   await reply(event.replyToken, [meterConfirmationFlex({
-    meterReading: Number(pending.meter_reading),
-    previousReading: pending.previous_reading === null ? null : Number(pending.previous_reading),
-    usage: pending.usage === null ? null : Number(pending.usage),
-    createdAt: pending.created_at
+    meterReading: TEST_CURRENT_READING,
+    previousReading: TEST_PREVIOUS_READING,
+    usage: TEST_USAGE,
+    createdAt: new Date()
   })]);
 }
 
 async function processPostbackEvent(event) {
   const action = new URLSearchParams(event.postback.data).get('action');
-  if (action === 'confirm_meter') {
-    let result;
-    try {
-      result = await confirmPendingMeter(event.source.userId);
-    } catch (error) {
-      console.error('Meter confirmation error:', error.message);
-      await reply(event.replyToken, [textMessage('❌ ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง')]);
-      return;
-    }
-    await reply(event.replyToken, [textMessage(
-      result.confirmed ? 'บันทึกมิเตอร์เรียบร้อยแล้ว ✅' : 'ไม่พบข้อมูลมิเตอร์ที่รอยืนยัน'
-    )]);
-  } else if (action === 'cancel_meter') {
-    try {
-      await cancelPendingMeter(event.source.userId);
-    } catch (error) {
-      console.error('Meter cancellation error:', error.message);
-      await reply(event.replyToken, [textMessage('❌ ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง')]);
-      return;
-    }
-    await reply(event.replyToken, [textMessage('ยกเลิกการบันทึกมิเตอร์แล้ว')]);
-  }
+  if (action === 'confirm_meter_test') await reply(event.replyToken, [textMessage('ระบบทดสอบ: กดปุ่มยืนยัน')]);
+  if (action === 'cancel_meter_test') await reply(event.replyToken, [textMessage('ระบบทดสอบ: กดยกเลิก')]);
 }
 
 async function handler(req, res) {

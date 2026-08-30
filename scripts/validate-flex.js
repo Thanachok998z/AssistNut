@@ -10,6 +10,6 @@ const message = meterConfirmationFlex({
 
 assert.equal(message.type, 'flex');
 assert.equal(message.contents.type, 'bubble');
-assert.equal(message.contents.footer.contents[0].action.data, 'action=cancel_meter');
-assert.equal(message.contents.footer.contents[1].action.data, 'action=confirm_meter');
+assert.equal(message.contents.footer.contents[0].action.data, 'action=cancel_meter_test');
+assert.equal(message.contents.footer.contents[1].action.data, 'action=confirm_meter_test');
 JSON.stringify(message);

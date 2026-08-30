@@ -44,8 +44,8 @@ function meterConfirmationFlex({ meterReading, previousReading, usage, createdAt
         ] }
       ] },
       footer: { type: 'box', layout: 'horizontal', spacing: 'sm', paddingAll: '16px', contents: [
-        { type: 'button', style: 'secondary', height: 'sm', flex: 1, action: { type: 'postback', label: 'ยกเลิก', data: 'action=cancel_meter', displayText: 'ยกเลิก' } },
-        { type: 'button', style: 'primary', height: 'sm', flex: 1, action: { type: 'postback', label: 'ยืนยัน', data: 'action=confirm_meter', displayText: 'ยืนยัน' } }
+        { type: 'button', style: 'secondary', height: 'sm', flex: 1, action: { type: 'postback', label: 'ยกเลิก', data: 'action=cancel_meter_test', displayText: 'ยกเลิก' } },
+        { type: 'button', style: 'primary', height: 'sm', flex: 1, action: { type: 'postback', label: 'ยืนยัน', data: 'action=confirm_meter_test', displayText: 'ยืนยัน' } }
       ] }
     }
   };
