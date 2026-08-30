@@ -60,15 +60,15 @@ async function reply(replyToken, messages) {
       body: responseBody
     });
     if (!response.ok) {
-      const error = new Error(`LINE Reply API returned HTTP ${response.status}: ${responseBody}`);
+      const error = new Error(`LINE Reply API failed: ${response.status} ${responseBody}`);
       error.status = response.status;
       error.responseBody = responseBody;
       throw error;
     }
   } catch (error) {
     console.error('LINE Reply API error:', {
-      status: 'N/A',
-      responseBody: 'N/A',
+      status: error.status || 'N/A',
+      responseBody: error.responseBody || 'N/A',
       errorName: error.name,
       errorMessage: error.message,
       errorCause: error.cause
@@ -161,6 +161,7 @@ async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
+    console.log('WEBHOOK HIT');
     const rawBody = await readRawBody(req);
     if (!validSignature(rawBody, req.headers['x-line-signature'])) {
       return res.status(401).json({ error: 'Invalid signature' });
