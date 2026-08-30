@@ -1,4 +1,6 @@
 const crypto = require('node:crypto');
+const { createPendingMeter, confirmPendingMeter, cancelPendingMeter } = require('../../src/electricity/meter-service');
+const { meterConfirmationFlex } = require('../../src/electricity/flex');
 const LINE_REPLY_API_URL = 'https://api.line.me/v2/bot/message/reply';
 
 function readRawBody(req) {
@@ -19,14 +21,14 @@ function validSignature(body, signature) {
   return actual.length === expectedValue.length && crypto.timingSafeEqual(actual, expectedValue);
 }
 
-function acknowledgementMessage() {
+function textMessage(text) {
   return {
     type: 'text',
-    text: 'ได้รับข้อความแล้วครับ ✅'
+    text
   };
 }
 
-async function reply(replyToken, message) {
+async function reply(replyToken, messages) {
   const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
   console.info('LINE Reply API request:', {
     tokenExists: Boolean(accessToken),
@@ -36,7 +38,7 @@ async function reply(replyToken, message) {
 
   if (!accessToken) {
     console.error('LINE_CHANNEL_ACCESS_TOKEN is missing');
-    return;
+    throw new Error('LINE_CHANNEL_ACCESS_TOKEN is missing');
   }
 
   try {
@@ -48,16 +50,20 @@ async function reply(replyToken, message) {
       },
       body: JSON.stringify({
         replyToken,
-        messages: [message]
+        messages
       })
     });
     const responseBody = await response.text();
+    console.log('LINE REPLY RESPONSE:', {
+      status: response.status,
+      ok: response.ok,
+      body: responseBody
+    });
     if (!response.ok) {
-      console.error('LINE Reply API error:', {
-        status: response.status,
-        responseBody,
-        errorMessage: `LINE Reply API returned HTTP ${response.status}`
-      });
+      const error = new Error(`LINE Reply API returned HTTP ${response.status}: ${responseBody}`);
+      error.status = response.status;
+      error.responseBody = responseBody;
+      throw error;
     }
   } catch (error) {
     console.error('LINE Reply API error:', {
@@ -73,6 +79,80 @@ async function reply(replyToken, message) {
           }
         : null
     });
+    throw error;
+  }
+}
+
+function parseMeterCommand(text) {
+  const matched = /^จดไฟ(?:\s+(.*))?$/u.exec(text.trim());
+  if (!matched) return null;
+  const numberText = matched[1]?.trim();
+  if (!numberText) return { valid: false, reason: 'missing' };
+  if (!/^\d+(?:\.\d+)?$/.test(numberText)) return { valid: false, reason: 'invalid' };
+  const meterReading = Number(numberText);
+  return Number.isFinite(meterReading) && meterReading >= 0
+    ? { valid: true, meterReading }
+    : { valid: false };
+}
+
+async function processTextEvent(event) {
+  const command = parseMeterCommand(event.message.text);
+  if (!command) {
+    await reply(event.replyToken, [textMessage('ได้รับข้อความแล้วครับ ✅')]);
+    return;
+  }
+  if (!command.valid) {
+    const message = command.reason === 'missing'
+      ? '❌ กรุณาระบุเลขมิเตอร์\n\nตัวอย่าง:\nจดไฟ 1234.5'
+      : '❌ กรุณาระบุเลขมิเตอร์ให้ถูกต้อง\n\nตัวอย่าง:\nจดไฟ 1234.5';
+    await reply(event.replyToken, [textMessage(message)]);
+    return;
+  }
+
+  let result;
+  try {
+    result = await createPendingMeter(event.source.userId, command.meterReading);
+  } catch (error) {
+    console.error('Meter pending creation error:', error.message);
+    await reply(event.replyToken, [textMessage('❌ ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง')]);
+    return;
+  }
+  if (result.kind === 'decreased') {
+    await reply(event.replyToken, [textMessage('⚠️ ค่ามิเตอร์ครั้งนี้น้อยกว่าครั้งก่อน\nกรุณาตรวจสอบอีกครั้ง')]);
+    return;
+  }
+  const { pending } = result;
+  await reply(event.replyToken, [meterConfirmationFlex({
+    meterReading: Number(pending.meter_reading),
+    previousReading: pending.previous_reading === null ? null : Number(pending.previous_reading),
+    usage: pending.usage === null ? null : Number(pending.usage),
+    createdAt: pending.created_at
+  })]);
+}
+
+async function processPostbackEvent(event) {
+  const action = new URLSearchParams(event.postback.data).get('action');
+  if (action === 'confirm_meter') {
+    let result;
+    try {
+      result = await confirmPendingMeter(event.source.userId);
+    } catch (error) {
+      console.error('Meter confirmation error:', error.message);
+      await reply(event.replyToken, [textMessage('❌ ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง')]);
+      return;
+    }
+    await reply(event.replyToken, [textMessage(
+      result.confirmed ? 'บันทึกมิเตอร์เรียบร้อยแล้ว ✅' : 'ไม่พบข้อมูลมิเตอร์ที่รอยืนยัน'
+    )]);
+  } else if (action === 'cancel_meter') {
+    try {
+      await cancelPendingMeter(event.source.userId);
+    } catch (error) {
+      console.error('Meter cancellation error:', error.message);
+      await reply(event.replyToken, [textMessage('❌ ไม่สามารถบันทึกข้อมูลได้ กรุณาลองใหม่อีกครั้ง')]);
+      return;
+    }
+    await reply(event.replyToken, [textMessage('ยกเลิกการบันทึกมิเตอร์แล้ว')]);
   }
 }
 
@@ -88,13 +168,20 @@ async function handler(req, res) {
     const payload = JSON.parse(rawBody.toString('utf8'));
     res.status(200).send('OK');
     await Promise.all((payload.events || []).map(async (event) => {
-      if (event.type === 'message' && event.message?.type === 'text' && event.replyToken) {
-        await reply(event.replyToken, acknowledgementMessage());
-      }
+      console.log('LINE EVENT:', {
+        type: event.type,
+        messageType: event.message?.type,
+        text: event.message?.text,
+        hasReplyToken: Boolean(event.replyToken)
+      });
+      if (!event.source?.userId || !event.replyToken) return;
+      if (event.type === 'message' && event.message?.type === 'text') await processTextEvent(event);
+      if (event.type === 'postback') await processPostbackEvent(event);
     }));
   } catch (error) {
     console.error('Webhook processing error:', error.message);
     if (!res.headersSent) res.status(500).json({ error: 'Webhook processing failed' });
+    if (res.headersSent) throw error;
   }
 }
 

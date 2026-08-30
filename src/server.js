@@ -1,18 +1,11 @@
 const http = require('node:http');
-const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 
 loadEnvFile(path.join(process.cwd(), '.env'));
 
+const webhookHandler = require('../api/line/webhook');
 const port = Number(process.env.PORT || 3000);
-const channelSecret = process.env.LINE_CHANNEL_SECRET;
-const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-const lineReplyApiUrl = 'https://api.line.me/v2/bot/message/reply';
-
-if (!channelSecret || !channelAccessToken) {
-  throw new Error('LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN are required.');
-}
 
 function loadEnvFile(filePath) {
   if (!fs.existsSync(filePath)) return;
@@ -22,96 +15,17 @@ function loadEnvFile(filePath) {
   }
 }
 
-function verifySignature(body, signature) {
-  const expected = crypto.createHmac('sha256', channelSecret).update(body).digest('base64');
-  if (!signature) return false;
-  const expectedBuffer = Buffer.from(expected);
-  const signatureBuffer = Buffer.from(signature);
-  return expectedBuffer.length === signatureBuffer.length && crypto.timingSafeEqual(expectedBuffer, signatureBuffer);
-}
-
-function acknowledgementMessage() {
-  return {
-    type: 'text',
-    text: 'ได้รับข้อความแล้วครับ ✅'
-  };
-}
-
-async function reply(replyToken, message) {
-  console.info('LINE Reply API request:', {
-    tokenExists: Boolean(process.env.LINE_CHANNEL_ACCESS_TOKEN),
-    replyTokenExists: Boolean(replyToken),
-    replyApiUrl: lineReplyApiUrl
-  });
-
-  if (!process.env.LINE_CHANNEL_ACCESS_TOKEN) {
-    console.error('LINE_CHANNEL_ACCESS_TOKEN is missing');
-    return;
-  }
-
-  try {
-    const response = await fetch(lineReplyApiUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        replyToken,
-        messages: [message]
-      })
-    });
-    const responseBody = await response.text();
-    if (!response.ok) {
-      console.error('LINE Reply API error:', {
-        status: response.status,
-        responseBody,
-        errorMessage: `LINE Reply API returned HTTP ${response.status}`
-      });
-    }
-  } catch (error) {
-    console.error('LINE Reply API error:', {
-      status: 'N/A',
-      responseBody: 'N/A',
-      errorName: error.name,
-      errorMessage: error.message,
-      errorCause: error.cause
-        ? {
-            name: error.cause.name || 'UnknownError',
-            message: error.cause.message || String(error.cause),
-            code: error.cause.code || null
-          }
-        : null
-    });
-  }
-}
-
 const server = http.createServer(async (req, res) => {
-  if (req.method === 'GET' && req.url === '/health') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', mode: 'reply-only-test' }));
-    return;
-  }
-  if (req.method !== 'POST' || req.url !== '/api/line/webhook') {
-    res.writeHead(404); res.end('Not found'); return;
-  }
-  const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
-  const body = Buffer.concat(chunks);
-  if (!verifySignature(body, req.headers['x-line-signature'])) {
-    res.writeHead(401); res.end('Invalid signature'); return;
-  }
-  res.writeHead(200); res.end('OK');
-  try {
-    const payload = JSON.parse(body.toString('utf8'));
-    for (const event of payload.events || []) {
-      if (event.type === 'message' && event.message?.type === 'text' && event.replyToken) {
-        await reply(event.replyToken, acknowledgementMessage());
-      }
-    }
-  } catch (error) {
-    console.error('Webhook processing error:', error.message);
-  }
+  res.status = (statusCode) => {
+    res.statusCode = statusCode;
+    return res;
+  };
+  res.json = (body) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
+  res.send = (body) => res.end(body);
+  await webhookHandler(req, res);
 });
 
-server.listen(port, () => console.log(`LINE test webhook listening on http://localhost:${port}`));
+server.listen(port, () => console.log(`LINE webhook listening on http://localhost:${port}`));

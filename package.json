@@ -7,8 +7,11 @@
     "node": "24.x"
   },
   "scripts": {
-    "build": "node --check src/server.js && node --check api/line/webhook.js",
+    "build": "node --check src/server.js && node --check api/line/webhook.js && node --check src/electricity/database.js && node --check src/electricity/meter-service.js && node --check src/electricity/flex.js && node scripts/validate-flex.js",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js"
+  },
+  "dependencies": {
+    "pg": "^8.23.0"
   }
 }
