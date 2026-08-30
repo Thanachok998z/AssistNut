@@ -37,15 +37,38 @@ function acknowledgementMessage() {
 }
 
 async function reply(replyToken, message) {
-  const response = await fetch('https://api.line.me/v2/bot/message/reply', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${channelAccessToken}`
-    },
-    body: JSON.stringify({ replyToken, messages: [message] })
-  });
-  if (!response.ok) throw new Error(`LINE reply failed (${response.status}): ${await response.text()}`);
+  if (!process.env.LINE_CHANNEL_ACCESS_TOKEN) {
+    console.error('LINE_CHANNEL_ACCESS_TOKEN is missing');
+    return;
+  }
+
+  try {
+    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        replyToken,
+        messages: [message]
+      })
+    });
+    const responseBody = await response.text();
+    if (!response.ok) {
+      console.error('LINE Reply API error:', {
+        status: response.status,
+        responseBody,
+        errorMessage: `LINE Reply API returned HTTP ${response.status}`
+      });
+    }
+  } catch (error) {
+    console.error('LINE Reply API error:', {
+      status: 'N/A',
+      responseBody: 'N/A',
+      errorMessage: error.message
+    });
+  }
 }
 
 const server = http.createServer(async (req, res) => {
