@@ -8,6 +8,7 @@ loadEnvFile(path.join(process.cwd(), '.env'));
 const port = Number(process.env.PORT || 3000);
 const channelSecret = process.env.LINE_CHANNEL_SECRET;
 const channelAccessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+const lineReplyApiUrl = 'https://api.line.me/v2/bot/message/reply';
 
 if (!channelSecret || !channelAccessToken) {
   throw new Error('LINE_CHANNEL_SECRET and LINE_CHANNEL_ACCESS_TOKEN are required.');
@@ -37,13 +38,19 @@ function acknowledgementMessage() {
 }
 
 async function reply(replyToken, message) {
+  console.info('LINE Reply API request:', {
+    tokenExists: Boolean(process.env.LINE_CHANNEL_ACCESS_TOKEN),
+    replyTokenExists: Boolean(replyToken),
+    replyApiUrl: lineReplyApiUrl
+  });
+
   if (!process.env.LINE_CHANNEL_ACCESS_TOKEN) {
     console.error('LINE_CHANNEL_ACCESS_TOKEN is missing');
     return;
   }
 
   try {
-    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+    const response = await fetch(lineReplyApiUrl, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
@@ -66,7 +73,15 @@ async function reply(replyToken, message) {
     console.error('LINE Reply API error:', {
       status: 'N/A',
       responseBody: 'N/A',
-      errorMessage: error.message
+      errorName: error.name,
+      errorMessage: error.message,
+      errorCause: error.cause
+        ? {
+            name: error.cause.name || 'UnknownError',
+            message: error.cause.message || String(error.cause),
+            code: error.cause.code || null
+          }
+        : null
     });
   }
 }

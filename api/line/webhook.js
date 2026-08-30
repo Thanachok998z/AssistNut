@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const LINE_REPLY_API_URL = 'https://api.line.me/v2/bot/message/reply';
 
 function readRawBody(req) {
   return new Promise((resolve, reject) => {
@@ -27,13 +28,19 @@ function acknowledgementMessage() {
 
 async function reply(replyToken, message) {
   const accessToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+  console.info('LINE Reply API request:', {
+    tokenExists: Boolean(accessToken),
+    replyTokenExists: Boolean(replyToken),
+    replyApiUrl: LINE_REPLY_API_URL
+  });
+
   if (!accessToken) {
     console.error('LINE_CHANNEL_ACCESS_TOKEN is missing');
     return;
   }
 
   try {
-    const response = await fetch('https://api.line.me/v2/bot/message/reply', {
+    const response = await fetch(LINE_REPLY_API_URL, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
@@ -56,7 +63,15 @@ async function reply(replyToken, message) {
     console.error('LINE Reply API error:', {
       status: 'N/A',
       responseBody: 'N/A',
-      errorMessage: error.message
+      errorName: error.name,
+      errorMessage: error.message,
+      errorCause: error.cause
+        ? {
+            name: error.cause.name || 'UnknownError',
+            message: error.cause.message || String(error.cause),
+            code: error.cause.code || null
+          }
+        : null
     });
   }
 }
