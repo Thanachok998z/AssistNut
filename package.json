@@ -4,8 +4,8 @@
   "private": true,
   "description": "LINE OA electricity assistant — reply-only test mode",
   "scripts": {
+    "build": "node --check src/server.js && node --check api/line/webhook.js",
     "dev": "node --watch src/server.js",
     "start": "node src/server.js"
   }
 }
-

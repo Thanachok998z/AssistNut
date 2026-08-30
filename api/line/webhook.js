@@ -18,34 +18,10 @@ function validSignature(body, signature) {
   return actual.length === expectedValue.length && crypto.timingSafeEqual(actual, expectedValue);
 }
 
-function flexMessage(command) {
+function acknowledgementMessage() {
   return {
-    type: 'flex',
-    altText: 'Electricity Assistant พร้อมตอบกลับแล้ว',
-    contents: {
-      type: 'bubble',
-      header: {
-        type: 'box', layout: 'vertical', backgroundColor: '#0E7490', paddingAll: '20px',
-        contents: [
-          { type: 'text', text: '⚡ Electricity Assistant', color: '#FFFFFF', weight: 'bold', size: 'lg' },
-          { type: 'text', text: 'โหมดทดสอบการตอบกลับ', color: '#CFFAFE', size: 'sm', margin: 'sm' }
-        ]
-      },
-      body: {
-        type: 'box', layout: 'vertical', spacing: 'md',
-        contents: [
-          { type: 'text', text: 'รับคำสั่งเรียบร้อย', weight: 'bold', size: 'md', color: '#0F172A' },
-          { type: 'text', text: command.trim() || '—', wrap: true, color: '#334155', size: 'sm' },
-          { type: 'separator' },
-          { type: 'text', text: 'ขณะนี้เป็นโหมดทดสอบ จึงยังไม่มีการบันทึกมิเตอร์หรือบิล', wrap: true, size: 'sm', color: '#64748B' }
-        ]
-      },
-      footer: {
-        type: 'box', layout: 'vertical', contents: [
-          { type: 'button', style: 'primary', color: '#0891B2', action: { type: 'message', label: 'ลอง จดไฟ 1234.5', text: 'จดไฟ 1234.5' } }
-        ]
-      }
-    }
+    type: 'text',
+    text: 'ได้รับข้อความแล้วครับ ✅'
   };
 }
 
@@ -74,7 +50,7 @@ async function handler(req, res) {
     res.status(200).send('OK');
     await Promise.all((payload.events || []).map(async (event) => {
       if (event.type === 'message' && event.message?.type === 'text' && event.replyToken) {
-        await reply(event.replyToken, flexMessage(event.message.text));
+        await reply(event.replyToken, acknowledgementMessage());
       }
     }));
   } catch (error) {
